@@ -1,0 +1,26 @@
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+
+dependencies {
+    if (remapped) modCompileOnly "com.terraformersmc:modmenu:${modMenuVersion}"
+    else compileOnly "com.terraformersmc:modmenu:${modMenuVersion}"
+    if (withModMenu) {
+        if (remapped) modRuntimeOnly "com.terraformersmc:modmenu:${modMenuVersion}"
+        else runtimeOnly "com.terraformersmc:modmenu:${modMenuVersion}"
+    }
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    if (remapped) {
+        mappings loom.officialMojangMappings()
+        modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    } else {
+        implementation "net.fabricmc:fabric-loader:${loader_version}"
+    }
+    implementation 'io.github.llamalad7:mixinextras-fabric:0.5.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.1'
+}
+
+if (withModMenu) apply from: 'gradle/modmenu.gradle'

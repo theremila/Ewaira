@@ -1,0 +1,15 @@
+def modMenuVersions = [
+    '1.21.1': '11.0.5', '1.21.10': '16.0.1', '1.21.11': '17.0.1',
+    '26.1': '18.0.2', '26.1.2': '18.0.2', '26.2': '20.0.3', '26.3': '21.0.1'
+]
+if (!modMenuVersions.containsKey(minecraft_version)) {
+    throw new GradleException("Unsupported target: ${minecraft_version}. Choose ${modMenuVersions.keySet()}")
+}
+ext.remapped = minecraft_version.startsWith('1.')
+ext.javaRelease = remapped ? 21 : 25
+ext.modMenuVersion = modMenuVersions[minecraft_version]
+def modes = ['verifyRendering', 'verifyQuads', 'verifyWorld', 'verifyRoute', 'verifyClient', 'verifyServer'].findAll { project.hasProperty(it) }
+if (modes.size() > 1) throw new GradleException("Choose one verification mode: ${modes}")
+ext.verificationMode = modes ? modes.first() : null
+ext.verificationEnabled = verificationMode != null
+ext.withModMenu = providers.gradleProperty('withModMenu').map { it.toBoolean() }.getOrElse(!verificationEnabled)

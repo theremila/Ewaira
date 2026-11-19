@@ -1,0 +1,187 @@
+sourceSets {
+    verification {
+        java.setSrcDirs([])
+        resources.setSrcDirs([])
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + sourceSets.main.runtimeClasspath
+    }
+}
+
+if (verificationMode in ['verifyRendering', 'verifyQuads', 'verifyServer']) sourceSets.verification.java.srcDir 'src/verification/common/model/java'
+if (minecraft_version == '26.3' && verificationMode in ['verifyRendering', 'verifyServer']) {
+    sourceSets.verification.java.srcDir 'src/verification/26.3/shared/java'
+}
+if (verificationMode in ['verifyRendering', 'verifyQuads']) {
+    sourceSets.verification.java.srcDir 'src/verification/common/texture/java'
+    if (!(minecraft_version in ['1.21.1', '1.21.10'])) sourceSets.verification.java.srcDir 'src/verification/1.21.11-26.3/texture/java'
+}
+
+if (project.hasProperty('verifyRendering')) {
+    if (minecraft_version == '1.21.1') throw new GradleException('Use verifyQuads for 1.21.1')
+    sourceSets.verification.java.srcDir 'src/verification/1.21.10-26.3/render/java'
+    if (minecraft_version == '26.3') sourceSets.verification.java.srcDir 'src/verification/26.3/render/java'
+    if (remapped) {
+        sourceSets.verification.java.srcDir 'src/verification/1.21.10-1.21.11/render/java'
+        sourceSets.verification.java.srcDir minecraft_version == '1.21.10' ? 'src/verification/1.21.10/render/java' : 'src/verification/1.21.11/render/java'
+    } else {
+        sourceSets.verification.java.srcDir 'src/verification/26.1-26.3/render/java'
+        sourceSets.verification.java.srcDir minecraft_version in ['26.2', '26.3']
+                ? 'src/verification/26.2-26.3/render/java' : 'src/verification/26.1-26.1.2/render/java'
+    }
+} else if (project.hasProperty('verifyQuads')) {
+    if (minecraft_version != '1.21.1') throw new GradleException('Quad verification targets 1.21.1')
+    sourceSets.verification.java.srcDirs 'src/verification/1.21.1/quad/java', 'src/verification/1.21.1/headless/java', 'src/verification/1.21.1/experimental/occlusion/java'
+} else if (project.hasProperty('verifyWorld')) {
+    if (!(minecraft_version in ['1.21.1', '26.3'])) throw new GradleException('World verification targets 1.21.1 or 26.3')
+    sourceSets.verification.java.srcDir minecraft_version == '1.21.1' ? 'src/verification/1.21.1/world/java' : 'src/verification/26.3/world/java'
+} else if (project.hasProperty('verifyServer')) {
+    sourceSets.verification.java.srcDir 'src/verification/common/server/java'
+} else if (project.hasProperty('verifyRoute')) {
+    if (minecraft_version != '26.3') throw new GradleException('Route verification targets 26.3')
+    sourceSets.verification.java.srcDir 'src/verification/26.3/route/java'
+} else if (project.hasProperty('verifyClient')) {
+    sourceSets.verification.java.srcDir 'src/verification/common/client/java'
+}
+
+def verificationMixins = [
+    verifyRendering: ['RenderVerificationMixin'],
+    verifyQuads: [ 'HeadlessVerificationMixin', 'OcclusionRegionVerificationMixin', 'VisibilitySetMixin',
+                  'SectionCompilerMixin', 'RenderSectionOcclusionMixin', 'CompiledSectionAccessor',
+                  'ViewAreaInvoker', 'EntityOcclusionMixin'],
+    verifyWorld: minecraft_version == '26.3' ? ['WorldVerificationMixin', 'WorldTerrainLodMixin', 'WorldCommandUploadMixin', 'WorldOptimizationMixins$Snapshot', 'WorldOptimizationMixins$Density', 'WorldOptimizationMixins$FarTerrain', 'WorldOptimizationMixins$Surface'] : ['WorldVerificationMixin'],
+    verifyRoute: ['RouteVerificationMixin'],
+    verifyServer: ['ServerVerificationMixin'],
+    verifyClient: ['VerificationMixin']
+][verificationMode] ?: []
+
+def verificationModId = "${mod_id}-verification"
+def verificationMixinsFile = "${verificationModId}.mixins.json"
+def routeVariant = providers.gradleProperty('routeVariant').getOrElse('vanilla')
+def routeDistance = providers.gradleProperty('verificationDistance').getOrElse('24')
+def routeRunDirectory = "run/route-${routeVariant}-${routeDistance}"
+def worldRunDirectory = "run/world-verification-${minecraft_version}"
+if (verificationEnabled) {
+    def verificationResources = layout.buildDirectory.dir('generated/verificationResources')
+    def generateVerificationResources = tasks.register('generateVerificationResources') {
+        inputs.properties(mixins: verificationMixins, modId: mod_id, modName: mod_name, java: javaRelease,
+                server: project.hasProperty('verifyServer'), standalone: project.hasProperty('verifyRoute'))
+        outputs.dir(verificationResources)
+        doLast {
+            def dir = verificationResources.get().asFile
+            dir.mkdirs()
+            new File(dir, 'fabric.mod.json').text = groovy.json.JsonOutput.toJson([
+                schemaVersion: 1, id: verificationModId, version: '1.0.0', environment: project.hasProperty('verifyServer') ? '*' : 'client',
+                name: "${mod_name} development verification", mixins: [verificationMixinsFile],
+                depends: project.hasProperty('verifyRoute') ? [:] : [(mod_id): '*']])
+            new File(dir, verificationMixinsFile).text = groovy.json.JsonOutput.toJson([
+                required: true, minVersion: '0.8', 'package': "${project.group}.mixin",
+                compatibilityLevel: 'JAVA_' + javaRelease,
+                (project.hasProperty('verifyServer') ? 'server' : 'client'): verificationMixins, injectors: [defaultRequire: 1]])
+        }
+    }
+    sourceSets.verification.resources.srcDir(verificationResources)
+    tasks.named('processVerificationResources') { dependsOn generateVerificationResources }
+}
+
+loom {
+    mods {
+        register(mod_id) { sourceSet sourceSets.main }
+        if (verificationEnabled) {
+            register(verificationModId) { sourceSet sourceSets.verification }
+        }
+    }
+    if (minecraft_version == '1.21.1') accessWidenerPath = file("src/versions/1.21.1/resources/${mod_id}.accesswidener")
+    if (minecraft_version == '26.3') accessWidenerPath = file("src/versions/26.3/resources/${mod_id}263.accesswidener")
+    runs {
+        server {
+            if (project.hasProperty('verifyServer')) source sourceSets.verification
+            runDir "run/server-${minecraft_version}"
+        }
+        client {
+            if (verificationEnabled) source sourceSets.verification
+            def startupTrial = project.hasProperty('verifyWorld') ? providers.gradleProperty('startupTrial').orNull : null
+            if (startupTrial != null && (minecraft_version != '26.3' || !(startupTrial in ['on', 'off']))) {
+                throw new GradleException('Startup trials require Minecraft 26.3 and startupTrial=on or off')
+            }
+            if (startupTrial != null) runDir "run/26.3-startup-${startupTrial}"
+            else if (project.hasProperty('verifyWorld')) runDir worldRunDirectory
+            else if (project.hasProperty('verifyRoute')) {
+                runDir routeRunDirectory
+                vmArg '-Dewaira.routeVariant=' + routeVariant
+                vmArg '-Dewaira.routeDistance=' + routeDistance
+                def routeWorld = providers.gradleProperty('routeWorld').orNull
+                if (routeWorld != null) vmArg '-Dewaira.routeWorld=' + routeWorld
+            }
+            else runDir "run/${minecraft_version}"
+            if (startupTrial != null) vmArg '-Dewaira.verifyStartup=true'
+            if (project.hasProperty('verifyRendering')) vmArg '-Dewaira.verifyLighting=true'
+            if (project.hasProperty('verifyWorld') && startupTrial == null) {
+                vmArg '-XX:StartFlightRecording=filename=ewaira-world.jfr,settings=profile,dumponexit=true,maxsize=256m'
+                vmArg '-Dewaira.verifyDistance=' + providers.gradleProperty('verificationDistance').getOrElse('12')
+            }
+            if (project.hasProperty('verifyParticles')) vmArg '-Dewaira.meshOnly=true'
+            if (project.hasProperty('verifyClient')) {
+                vmArg '-Dewaira.verify=true'
+            }
+        }
+    }
+}
+
+if (project.hasProperty('verifyRoute')) {
+    def report = layout.projectDirectory.file("${routeRunDirectory}/route-result.txt")
+    tasks.named('runClient') {
+        classpath = sourceSets.verification.runtimeClasspath.minus(sourceSets.main.output)
+        doFirst { delete(report) }
+        doLast {
+            if (!report.asFile.exists()) throw new GradleException('Route verification did not complete')
+        }
+    }
+}
+
+if (project.hasProperty('verifyRendering') || project.hasProperty('verifyQuads')) {
+    tasks.named('runClient') {
+        // A missing development hook must fail instead of opening a graphics window.
+        environment 'DISPLAY', ''
+        environment 'WAYLAND_DISPLAY', ''
+        environment 'SDL_VIDEO_DRIVER', 'dummy'
+    }
+}
+
+if (project.hasProperty('verifyServer')) {
+    def report = layout.projectDirectory.file("run/server-${minecraft_version}/ewaira-server-verification.txt")
+    tasks.named('runServer') {
+        doFirst { delete(report) }
+        doLast {
+            if (!report.asFile.exists()) throw new GradleException('Dedicated-server verification hook did not execute')
+        }
+    }
+}
+
+if (project.hasProperty('verifyWorld') && !project.hasProperty('startupTrial')) {
+    def reportName = minecraft_version == '26.3' ? 'ewaira-world-verification.txt' : 'ewaira-profile.txt'
+    def report = layout.projectDirectory.file("${worldRunDirectory}/${reportName}")
+    def densityControl = minecraft_version == '26.3' && providers.environmentVariable('EWAIRA_VERIFY_DENSITY_CONTROL').orElse('0').get() == '1'
+    def replayOnly = minecraft_version == '26.3' && providers.environmentVariable('EWAIRA_VERIFY_REPLAY_ONLY').orElse('0').get() == '1'
+    def surfaces = layout.projectDirectory.file("${worldRunDirectory}/surface-states-${densityControl ? 'off' : 'on'}.txt")
+    tasks.named('runClient') {
+        doFirst {
+            delete(report)
+            if (!replayOnly) delete(surfaces)
+        }
+        doLast {
+            if (!report.asFile.exists()) throw new GradleException('World verification did not complete')
+            if (replayOnly) {
+                if (report.asFile.text.count('stationary_round=') != 8 || !(report.asFile.text =~ /(?m)^draw_group_replays=[1-9]/)) {
+                    throw new GradleException('Draw group replay verification did not complete')
+                }
+                return
+            }
+            if (minecraft_version == '26.3' && (!surfaces.asFile.exists() || surfaces.asFile.readLines().size() != 25)) {
+                throw new GradleException('World verification did not generate 25 surface samples')
+            }
+            if (minecraft_version == '26.3' && !densityControl && report.asFile.text.count('teleport_acknowledged=true') != 6) {
+                throw new GradleException('World verification did not acknowledge all six teleports')
+            }
+        }
+    }
+}

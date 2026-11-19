@@ -1,0 +1,88 @@
+def commonMixins = ['BiomeSamplingMixin']
+if (minecraft_version == '26.3') commonMixins += ['PalettePackingMixin', 'SurfaceDensityScopeMixin', 'OreDensityScopeMixin', 'OreDensityBufferMixin', 'ClimateScratchMixins$VanillaSearch', 'ClimateScratchMixins$ParameterArray']
+def renderingMixins = ['ClientFrameDebugMixin', 'AutomaticTuningMixin', 'NativeImagePixelsAccessor', 'NativeImageCopyMixin', 'FontMixin', 'FontSetMixin', 'BufferBuilderMixin', 'ModelLightingCacheMixin',
+                       'BlockFaceMixin', 'ModelCubeMixin', 'ModelBufferMixin', 'TerrainDrawMixin', 'TerrainIndexMixin', 'SectionVisibilityMixin', 'ItemLodMixin']
+if (minecraft_version == '1.21.1') {
+    renderingMixins += ['SingleQuadParticleMixin', 'LevelRendererAccessor', 'FrustumInvoker',
+                       'BlockEntityCullingMixin', 'TerrainMeshDataMixin', 'TerrainSectionCompilerMixin',
+                       'TerrainVertexBufferMixin']
+} else renderingMixins += ['TerrainCompiledMeshMixin']
+
+if (!(minecraft_version in ['1.21.1', '1.21.10'])) renderingMixins += ['TexturePreparationMixin']
+if (minecraft_version == '26.3') renderingMixins += ['TerrainPreparationMixin', 'TerrainSectionCacheMixin', 'TerrainSliceCacheMixin',
+                                                     'TerrainAllocationMixin', 'TerrainCommandUploadMixin', 'FarTerrainCaptureMixin', 'FarTerrainPipelineMixin', 'FarTerrainShaderMixin', 'FarTerrainRenderMixin']
+
+def previousModIds = [previous_mod_id, legacy_mod_id]
+def metadataValues = [version: project.version, minecraft: minecraft_version, java: javaRelease, mod_id: mod_id, mod_name: mod_name,
+                      mod_package: project.group, previous_mod_id: previous_mod_id, legacy_mod_id: legacy_mod_id]
+processResources {
+    inputs.properties(metadataValues + [mixins: renderingMixins, commonMixins: commonMixins])
+    filesMatching('fabric.mod.json') {
+        expand(metadataValues)
+    }
+    doLast {
+        def mixinsFile = new File(destinationDir, "${mod_id}.mixins.json")
+        def mixins = new groovy.json.JsonSlurper().parse(mixinsFile)
+        mixins.client = renderingMixins
+        mixins.mixins = commonMixins
+        mixins.compatibilityLevel = 'JAVA_' + javaRelease
+        mixinsFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mixins)) + '\n'
+        if (minecraft_version in ['1.21.1', '26.3']) {
+            def metadata = new File(destinationDir, 'fabric.mod.json')
+            def json = new groovy.json.JsonSlurper().parse(metadata)
+            json.accessWidener = (minecraft_version == '26.3' ? "${mod_id}263" : mod_id) + '.accesswidener'
+            metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)) + '\n'
+        }
+    }
+}
+tasks.withType(Jar).configureEach {
+    includeEmptyDirs = false
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+def licenseFile = layout.projectDirectory.file('LICENSE')
+def licenseEntry = "LICENSE_${mod_id}".toString()
+['jar', 'sourcesJar'].each { taskName ->
+    tasks.named(taskName, Jar) {
+        from(licenseFile) { rename { licenseEntry } }
+    }
+}
+
+// Both normal and verification builds must produce distributable, production-only archives.
+def productionJar = tasks.named(remapped ? 'remapJar' : 'jar')
+def productionSources = tasks.named(remapped ? 'remapSourcesJar' : 'sourcesJar')
+tasks.register('verifyProductionArtifacts') {
+    dependsOn productionJar, productionSources
+    inputs.files(productionJar.flatMap { it.archiveFile }, productionSources.flatMap { it.archiveFile })
+    inputs.file(licenseFile)
+    inputs.property('licenseEntry', licenseEntry)
+    inputs.property('previousModIds', previousModIds)
+    doLast {
+        def expectedLicense = licenseFile.asFile.bytes
+        [productionJar.get().archiveFile.get().asFile, productionSources.get().archiveFile.get().asFile].each { file ->
+            new java.util.zip.ZipFile(file).withCloseable { archive ->
+                def license = archive.getEntry(licenseEntry)
+                if (license == null || !Arrays.equals(expectedLicense, archive.getInputStream(license).withCloseable { it.bytes })) {
+                    throw new GradleException("Missing or incorrect license in ${file.name}: ${licenseEntry}")
+                }
+                archive.entries().each { entry ->
+                    def path = entry.name
+                    if (previousModIds.any { id ->
+                        path.contains("/${id}/") || path.startsWith("${id}.")
+                                || path == "${id}263.accesswidener" || path == "LICENSE_${id}"
+                    }) {
+                        throw new GradleException("Legacy module output leaked into ${file.name}: ${path}")
+                    }
+                    if (path.contains('/verification/') || path.contains('/occlusion/')
+                            || path.startsWith('com/terraformersmc/') || path.contains('VerificationMixin')
+                            || path ==~ /.*\/[^\/]+Verification\.(class|java)/
+                            || path == "${mod_id}-verification.mixins.json"
+                            || path ==~ /.*\/(ClientPacketListenerMixin|ClientMessages|SectionCompilerMixin|VisibilitySetMixin|RenderSectionOcclusionMixin|CompiledSectionAccessor|ViewAreaInvoker|EntityOcclusionMixin)\.(class|java)/) {
+                        throw new GradleException("Development or bundled optional dependency leaked into ${file.name}: ${path}")
+                    }
+                }
+            }
+        }
+    }
+}
+tasks.named('check') { dependsOn 'verifyProductionArtifacts' }

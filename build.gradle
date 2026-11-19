@@ -1,0 +1,19 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.fabricmc.net/' }
+        mavenCentral()
+    }
+    dependencies { classpath 'net.fabricmc:fabric-loom:1.17.21' }
+}
+
+apply from: 'gradle/targets.gradle'
+apply plugin: remapped ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
+
+base { archivesName = mod_id }
+version = "${version}+mc${minecraft_version}"
+layout.buildDirectory = layout.projectDirectory.dir("build/${mod_id}/${minecraft_version}")
+
+apply from: 'gradle/dependencies.gradle'
+apply from: 'gradle/sources.gradle'
+apply from: 'gradle/verification.gradle'
+apply from: 'gradle/packaging.gradle'

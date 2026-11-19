@@ -1,0 +1,1 @@
+rootProject.name = providers.gradleProperty('mod_id').get()
