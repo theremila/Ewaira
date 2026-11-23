@@ -3,7 +3,7 @@ buildscript {
         maven { url = 'https://maven.fabricmc.net/' }
         mavenCentral()
     }
-    dependencies { classpath 'net.fabricmc:fabric-loom:1.17.21' }
+    dependencies { classpath 'net.fabricmc:fabric-loom:1.19.4' }
 }
 
 apply from: 'gradle/targets.gradle'
@@ -17,3 +17,4 @@ apply from: 'gradle/dependencies.gradle'
 apply from: 'gradle/sources.gradle'
 apply from: 'gradle/verification.gradle'
 apply from: 'gradle/packaging.gradle'
+apply from: 'gradle/bootstrap.gradle'

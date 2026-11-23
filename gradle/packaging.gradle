@@ -1,7 +1,7 @@
 def commonMixins = ['BiomeSamplingMixin']
 if (minecraft_version == '26.3') commonMixins += ['PalettePackingMixin', 'SurfaceDensityScopeMixin', 'OreDensityScopeMixin', 'OreDensityBufferMixin', 'ClimateScratchMixins$VanillaSearch', 'ClimateScratchMixins$ParameterArray']
 def renderingMixins = ['ClientFrameDebugMixin', 'AutomaticTuningMixin', 'NativeImagePixelsAccessor', 'NativeImageCopyMixin', 'FontMixin', 'FontSetMixin', 'BufferBuilderMixin', 'ModelLightingCacheMixin',
-                       'BlockFaceMixin', 'ModelCubeMixin', 'ModelBufferMixin', 'TerrainDrawMixin', 'TerrainIndexMixin', 'SectionVisibilityMixin', 'ItemLodMixin']
+                       'BlockFaceMixin', 'ModelCubeMixin', 'ModelBufferMixin', 'TerrainDrawMixin', 'TerrainIndexMixin', 'SectionVisibilityMixin', 'VisibilityOccupancyMixin', 'SectionOccupancyPublishMixin', 'OccupancyLifecycleMixin', 'EntityCullMixin', 'ItemLodMixin']
 if (minecraft_version == '1.21.1') {
     renderingMixins += ['SingleQuadParticleMixin', 'LevelRendererAccessor', 'FrustumInvoker',
                        'BlockEntityCullingMixin', 'TerrainMeshDataMixin', 'TerrainSectionCompilerMixin',
@@ -10,9 +10,11 @@ if (minecraft_version == '1.21.1') {
 
 if (!(minecraft_version in ['1.21.1', '1.21.10'])) renderingMixins += ['TexturePreparationMixin']
 if (minecraft_version == '26.3') renderingMixins += ['TerrainPreparationMixin', 'TerrainSectionCacheMixin', 'TerrainSliceCacheMixin',
-                                                     'TerrainAllocationMixin', 'TerrainCommandUploadMixin', 'FarTerrainCaptureMixin', 'FarTerrainPipelineMixin', 'FarTerrainShaderMixin', 'FarTerrainRenderMixin']
+                                                     'TerrainAllocationMixin', 'TerrainCommandUploadMixin', 'ChunkSectionInfoMixin',
+                                                     'DynamicGpuCapacityMixin', 'ChunkUploadPacingMixin', 'EntityShadowAndStateMixin',
+                                                     'BlockEntityOcclusionMixin', 'FarTerrainCaptureMixin', 'FarTerrainPipelineMixin', 'FarTerrainShaderMixin', 'FarTerrainRenderMixin']
 
-def previousModIds = [previous_mod_id, legacy_mod_id]
+def previousModIds = [previous_mod_id, legacy_mod_id, 'evaframe']
 def metadataValues = [version: project.version, minecraft: minecraft_version, java: javaRelease, mod_id: mod_id, mod_name: mod_name,
                       mod_package: project.group, previous_mod_id: previous_mod_id, legacy_mod_id: legacy_mod_id]
 processResources {
@@ -23,6 +25,7 @@ processResources {
     doLast {
         def mixinsFile = new File(destinationDir, "${mod_id}.mixins.json")
         def mixins = new groovy.json.JsonSlurper().parse(mixinsFile)
+        mixins.package = "${project.group}.mixin"
         mixins.client = renderingMixins
         mixins.mixins = commonMixins
         mixins.compatibilityLevel = 'JAVA_' + javaRelease

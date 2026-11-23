@@ -63,8 +63,8 @@ def worldRunDirectory = "run/world-verification-${minecraft_version}"
 if (verificationEnabled) {
     def verificationResources = layout.buildDirectory.dir('generated/verificationResources')
     def generateVerificationResources = tasks.register('generateVerificationResources') {
-        inputs.properties(mixins: verificationMixins, modId: mod_id, modName: mod_name, java: javaRelease,
-                server: project.hasProperty('verifyServer'), standalone: project.hasProperty('verifyRoute'))
+        inputs.properties(mixins: verificationMixins, modId: mod_id, modName: mod_name, group: project.group.toString(),
+                java: javaRelease, server: project.hasProperty('verifyServer'), standalone: project.hasProperty('verifyRoute'))
         outputs.dir(verificationResources)
         doLast {
             def dir = verificationResources.get().asFile
@@ -107,21 +107,21 @@ loom {
             else if (project.hasProperty('verifyWorld')) runDir worldRunDirectory
             else if (project.hasProperty('verifyRoute')) {
                 runDir routeRunDirectory
-                vmArg '-Dewaira.routeVariant=' + routeVariant
-                vmArg '-Dewaira.routeDistance=' + routeDistance
+                vmArg '-Dcirrus.routeVariant=' + routeVariant
+                vmArg '-Dcirrus.routeDistance=' + routeDistance
                 def routeWorld = providers.gradleProperty('routeWorld').orNull
-                if (routeWorld != null) vmArg '-Dewaira.routeWorld=' + routeWorld
+                if (routeWorld != null) vmArg '-Dcirrus.routeWorld=' + routeWorld
             }
             else runDir "run/${minecraft_version}"
-            if (startupTrial != null) vmArg '-Dewaira.verifyStartup=true'
-            if (project.hasProperty('verifyRendering')) vmArg '-Dewaira.verifyLighting=true'
+            if (startupTrial != null) vmArg '-Dcirrus.verifyStartup=true'
+            if (project.hasProperty('verifyRendering')) vmArg '-Dcirrus.verifyLighting=true'
             if (project.hasProperty('verifyWorld') && startupTrial == null) {
-                vmArg '-XX:StartFlightRecording=filename=ewaira-world.jfr,settings=profile,dumponexit=true,maxsize=256m'
-                vmArg '-Dewaira.verifyDistance=' + providers.gradleProperty('verificationDistance').getOrElse('12')
+                vmArg '-XX:StartFlightRecording=filename=cirrus-world.jfr,settings=profile,dumponexit=true,maxsize=256m'
+                vmArg '-Dcirrus.verifyDistance=' + providers.gradleProperty('verificationDistance').getOrElse('12')
             }
-            if (project.hasProperty('verifyParticles')) vmArg '-Dewaira.meshOnly=true'
+            if (project.hasProperty('verifyParticles')) vmArg '-Dcirrus.meshOnly=true'
             if (project.hasProperty('verifyClient')) {
-                vmArg '-Dewaira.verify=true'
+                vmArg '-Dcirrus.verify=true'
             }
         }
     }
@@ -148,7 +148,7 @@ if (project.hasProperty('verifyRendering') || project.hasProperty('verifyQuads')
 }
 
 if (project.hasProperty('verifyServer')) {
-    def report = layout.projectDirectory.file("run/server-${minecraft_version}/ewaira-server-verification.txt")
+    def report = layout.projectDirectory.file("run/server-${minecraft_version}/cirrus-server-verification.txt")
     tasks.named('runServer') {
         doFirst { delete(report) }
         doLast {
@@ -158,10 +158,10 @@ if (project.hasProperty('verifyServer')) {
 }
 
 if (project.hasProperty('verifyWorld') && !project.hasProperty('startupTrial')) {
-    def reportName = minecraft_version == '26.3' ? 'ewaira-world-verification.txt' : 'ewaira-profile.txt'
+    def reportName = minecraft_version == '26.3' ? 'cirrus-world-verification.txt' : 'cirrus-profile.txt'
     def report = layout.projectDirectory.file("${worldRunDirectory}/${reportName}")
-    def densityControl = minecraft_version == '26.3' && providers.environmentVariable('EWAIRA_VERIFY_DENSITY_CONTROL').orElse('0').get() == '1'
-    def replayOnly = minecraft_version == '26.3' && providers.environmentVariable('EWAIRA_VERIFY_REPLAY_ONLY').orElse('0').get() == '1'
+    def densityControl = minecraft_version == '26.3' && providers.environmentVariable('CIRRUS_VERIFY_DENSITY_CONTROL').orElse('0').get() == '1'
+    def replayOnly = minecraft_version == '26.3' && providers.environmentVariable('CIRRUS_VERIFY_REPLAY_ONLY').orElse('0').get() == '1'
     def surfaces = layout.projectDirectory.file("${worldRunDirectory}/surface-states-${densityControl ? 'off' : 'on'}.txt")
     tasks.named('runClient') {
         doFirst {

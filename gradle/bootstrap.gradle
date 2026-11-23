@@ -1,0 +1,48 @@
+def allMinecraftTargets = ['1.21.1', '1.21.10', '1.21.11', '26.1', '26.1.2', '26.2', '26.3']
+def includeAssets = providers.gradleProperty('withAssets').map { it.toBoolean() }.getOrElse(true)
+
+tasks.register('setupTarget') {
+    group = 'cirrus'
+    description = "Download dependencies, Minecraft artifacts, and compile classes for ${minecraft_version}"
+    dependsOn 'compileJava', 'compileTestJava'
+    if (includeAssets) {
+        dependsOn 'downloadAssets'
+    }
+    doLast {
+        logger.lifecycle("Target ${minecraft_version} is ready (Java release ${javaRelease}, assets=${includeAssets}).")
+    }
+}
+
+def registerMatrixTask = { String taskName, String taskDescription, List<String> subTasks ->
+    tasks.register(taskName) {
+        group = 'cirrus'
+        description = taskDescription
+        doLast {
+            def isWindows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')
+            def wrapper = layout.projectDirectory.file(isWindows ? 'gradlew.bat' : 'gradlew').asFile.absolutePath
+            allMinecraftTargets.each { target ->
+                logger.lifecycle("=== [${taskName}] ${target} ===")
+                def cmd = ([wrapper] + subTasks + ["-Pminecraft_version=${target}", '--no-configuration-cache'])
+                if (project.hasProperty('withAssets')) {
+                    cmd << "-PwithAssets=${providers.gradleProperty('withAssets').get()}"
+                }
+                def process = new ProcessBuilder(cmd.collect { it.toString() })
+                        .directory(layout.projectDirectory.asFile)
+                        .inheritIO()
+                        .start()
+                int exit = process.waitFor()
+                if (exit != 0) {
+                    throw new GradleException("${taskName} failed for Minecraft ${target} (exit code ${exit})")
+                }
+            }
+        }
+    }
+}
+
+registerMatrixTask('setupAllTargets',
+        'Download dependencies, Minecraft artifacts, and assets for all 7 supported Minecraft versions',
+        ['setupTarget'])
+
+registerMatrixTask('verifyAllTargets',
+        'Run unit tests and production artifact checks across all 7 supported Minecraft versions',
+        ['test', 'verifyProductionArtifacts'])

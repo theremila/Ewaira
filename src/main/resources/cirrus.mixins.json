@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "remila.sex.cirrus.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["FontMixin", "FontSetMixin", "ClientFrameDebugMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

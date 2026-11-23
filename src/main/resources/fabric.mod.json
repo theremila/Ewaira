@@ -3,9 +3,10 @@
   "id": "${mod_id}",
   "version": "${version}",
   "name": "${mod_name}",
+  "icon": "assets/${mod_id}/icon.png",
   "description": "Client rendering and shared biome sampling optimizations: caching, vertex encoding, model batching, lighting and terrain face culling. Ready to play, with optional Mod Menu settings.",
   "authors": [
-    "evasex"
+    "theremila"
   ],
   "license": "MIT",
   "environment": "*",
@@ -13,9 +14,9 @@
     "${mod_id}.mixins.json"
   ],
   "entrypoints": {
-    "client": ["${mod_package}.EwairaClient"],
-    "server": ["${mod_package}.EwairaServer"],
-    "modmenu": ["${mod_package}.integration.EwairaModMenu"]
+    "client": ["${mod_package}.CirrusClient"],
+    "server": ["${mod_package}.CirrusServer"],
+    "modmenu": ["${mod_package}.integration.CirrusModMenu"]
   },
   "suggests": {"modmenu": "*"},
   "breaks": {"${previous_mod_id}": "*", "${legacy_mod_id}": "*"},
